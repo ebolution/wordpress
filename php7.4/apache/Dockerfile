@@ -92,13 +92,39 @@ RUN set -eux; \
 # (replace all instances of "%h" with "%a" in LogFormat)
 	find /etc/apache2 -type f -name '*.conf' -exec sed -ri 's/([[:space:]]*LogFormat[[:space:]]+"[^"]*)%h([^"]*")/\1%a\2/g' '{}' +
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    vim \
+    zlib1g-dev
+
+RUN pecl channel-update pecl.php.net \
+  && pecl install xdebug \
+  && docker-php-ext-enable xdebug \
+  && sed -i -e 's/^zend_extension/\;zend_extension/g' /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+COPY conf/cert/server.crt /etc/apache2/ssl/server.crt
+COPY conf/cert/server.key /etc/apache2/ssl/server.key
+COPY conf/default-ssl.conf /etc/apache2/sites-enabled/default-ssl.conf
+RUN a2enmod rewrite
+RUN a2enmod ssl
+RUN service apache2 restart
+
+COPY conf/php.ini /usr/local/etc/php/
+COPY conf/xdebug.ini /usr/local/etc/php/conf.d/
+
 VOLUME /var/www/html
 
-ENV WORDPRESS_VERSION 5.3.2
-ENV WORDPRESS_SHA1 fded476f112dbab14e3b5acddd2bcfa550e7b01b
+RUN curl -o /root/wp-cli.phar -fSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && \
+	mv /root/wp-cli.phar /usr/local/bin/wp-cli && \
+	chmod +x /usr/local/bin/wp-cli
+
+VOLUME /var/www/html
+
+ENV WORDPRESS_VERSION 5.7.1-es_ES
+ENV WORDPRESS_SHA1 e0c1e628a17a498cbe93920cc4104e39fc9b8772
 
 RUN set -ex; \
-	curl -o wordpress.tar.gz -fSL "https://wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
 	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
 # upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
 	tar -xzf wordpress.tar.gz -C /usr/src/; \
