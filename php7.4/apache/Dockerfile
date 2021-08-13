@@ -120,8 +120,8 @@ RUN curl -o /root/wp-cli.phar -fSL https://raw.githubusercontent.com/wp-cli/buil
 
 VOLUME /var/www/html
 
-ENV WORDPRESS_VERSION 5.7.2-es_ES
-ENV WORDPRESS_SHA1 04fde17f612dd24b208ce21da9b7e993e4ba1f31
+ENV WORDPRESS_VERSION 5.8-es_ES
+ENV WORDPRESS_SHA1 b09e409b78e1567384e55f8ba50076b2cc7980de
 
 RUN set -ex; \
 	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
