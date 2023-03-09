@@ -174,10 +174,11 @@ ENV WORDPRESS_SHA1 394c09f6041a79927f553ba0026b70e0200e460a
 RUN set -ex; \
 	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
 	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
-# upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
-	tar -xzf wordpress.tar.gz -C /usr/src/; \
-	rm wordpress.tar.gz; \
-	chown -R www-data:www-data /usr/src/wordpress
+	tar -xzf wordpress.tar.gz -C /var/www/html/; \
+    cp -r wordpress/* .; \
+    rm wordpress.tar.gz; \
+    rm -rf wordpress; \
+    chown -R www-data:www-data /var/www/html
 
 COPY --chown=www-data:www-data wp-config-docker.php /usr/src/wordpress/
 COPY docker-entrypoint.sh /usr/local/bin/
