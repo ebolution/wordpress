@@ -76,6 +76,14 @@ RUN set -ex; \
 	err="$(php --version 3>&1 1>&2 2>&3)"; \
 	[ -z "$err" ]
 
+# install xdebug
+RUN pecl channel-update pecl.php.net \
+  && pecl install xdebug \
+  && docker-php-ext-enable xdebug \
+  && sed -i -e 's/^zend_extension/\;zend_extension/g' /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+COPY config/xdebug.ini /usr/local/etc/php/conf.d/
+
 # set recommended PHP.ini settings
 # see https://secure.php.net/manual/en/opcache.installation.php
 RUN set -eux; \
@@ -159,6 +167,17 @@ RUN set -eux; \
 	chmod -R 777 wp-content
 
 VOLUME /var/www/html
+
+ENV WORDPRESS_VERSION 6.1.1-es_ES
+ENV WORDPRESS_SHA1 394c09f6041a79927f553ba0026b70e0200e460a
+
+RUN set -ex; \
+	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
+# upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
+	tar -xzf wordpress.tar.gz -C /usr/src/; \
+	rm wordpress.tar.gz; \
+	chown -R www-data:www-data /usr/src/wordpress
 
 COPY --chown=www-data:www-data wp-config-docker.php /usr/src/wordpress/
 COPY docker-entrypoint.sh /usr/local/bin/
