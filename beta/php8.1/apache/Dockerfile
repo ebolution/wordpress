@@ -1,10 +1,4 @@
-#
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"
-#
-# PLEASE DO NOT EDIT IT DIRECTLY.
-#
-
-FROM php:8.1-apache
+FROM php:7.4-apache
 
 # persistent dependencies
 RUN set -eux; \
@@ -23,44 +17,28 @@ RUN set -ex; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
 		libfreetype6-dev \
-		libicu-dev \
 		libjpeg-dev \
 		libmagickwand-dev \
 		libpng-dev \
-		libwebp-dev \
 		libzip-dev \
 	; \
 	\
-	docker-php-ext-configure gd \
-		--with-freetype \
-		--with-jpeg \
-		--with-webp \
-	; \
+	docker-php-ext-configure gd --with-freetype --with-jpeg; \
 	docker-php-ext-install -j "$(nproc)" \
 		bcmath \
 		exif \
 		gd \
-		intl \
 		mysqli \
+		opcache \
 		zip \
 	; \
-# https://pecl.php.net/package/imagick
-	pecl install imagick-3.6.0; \
+	pecl install imagick-3.4.4; \
 	docker-php-ext-enable imagick; \
-	rm -r /tmp/pear; \
 	\
-# some misbehaving extensions end up outputting to stdout 🙈 (https://github.com/docker-library/wordpress/issues/669#issuecomment-993945967)
-	out="$(php -r 'exit(0);')"; \
-	[ -z "$out" ]; \
-	err="$(php -r 'exit(0);' 3>&1 1>&2 2>&3)"; \
-	[ -z "$err" ]; \
-	\
-	extDir="$(php -r 'echo ini_get("extension_dir");')"; \
-	[ -d "$extDir" ]; \
 # reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark; \
-	ldd "$extDir"/*.so \
+	ldd "$(php -r 'echo ini_get("extension_dir");')"/*.so \
 		| awk '/=>/ { print $3 }' \
 		| sort -u \
 		| xargs -r dpkg-query -S \
@@ -69,22 +47,16 @@ RUN set -ex; \
 		| xargs -rt apt-mark manual; \
 	\
 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
-	rm -rf /var/lib/apt/lists/*; \
-	\
-	! { ldd "$extDir"/*.so | grep 'not found'; }; \
-# check for output like "PHP Warning:  PHP Startup: Unable to load dynamic library 'foo' (tried: ...)
-	err="$(php --version 3>&1 1>&2 2>&3)"; \
-	[ -z "$err" ]
+	rm -rf /var/lib/apt/lists/*
 
 # set recommended PHP.ini settings
 # see https://secure.php.net/manual/en/opcache.installation.php
-RUN set -eux; \
-	docker-php-ext-enable opcache; \
-	{ \
+RUN { \
 		echo 'opcache.memory_consumption=128'; \
 		echo 'opcache.interned_strings_buffer=8'; \
 		echo 'opcache.max_accelerated_files=4000'; \
 		echo 'opcache.revalidate_freq=2'; \
+		echo 'opcache.fast_shutdown=1'; \
 	} > /usr/local/etc/php/conf.d/opcache-recommended.ini
 # https://wordpress.org/support/article/editing-wp-config-php/#configure-error-logging
 RUN { \
@@ -120,47 +92,45 @@ RUN set -eux; \
 # (replace all instances of "%h" with "%a" in LogFormat)
 	find /etc/apache2 -type f -name '*.conf' -exec sed -ri 's/([[:space:]]*LogFormat[[:space:]]+"[^"]*)%h([^"]*")/\1%a\2/g' '{}' +
 
-RUN set -eux; \
-	version='6.2-beta5'; \
-	sha1='d7df4fd639fbec4e3d50851aac24b636c17cc873'; \
-	\
-	curl -o wordpress.tar.gz -fL "https://wordpress.org/wordpress-$version.tar.gz"; \
-	echo "$sha1 *wordpress.tar.gz" | sha1sum -c -; \
-	\
-# upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
-	tar -xzf wordpress.tar.gz -C /usr/src/; \
-	rm wordpress.tar.gz; \
-	\
-# https://wordpress.org/support/article/htaccess/
-	[ ! -e /usr/src/wordpress/.htaccess ]; \
-	{ \
-		echo '# BEGIN WordPress'; \
-		echo ''; \
-		echo 'RewriteEngine On'; \
-		echo 'RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]'; \
-		echo 'RewriteBase /'; \
-		echo 'RewriteRule ^index\.php$ - [L]'; \
-		echo 'RewriteCond %{REQUEST_FILENAME} !-f'; \
-		echo 'RewriteCond %{REQUEST_FILENAME} !-d'; \
-		echo 'RewriteRule . /index.php [L]'; \
-		echo ''; \
-		echo '# END WordPress'; \
-	} > /usr/src/wordpress/.htaccess; \
-	\
-	chown -R www-data:www-data /usr/src/wordpress; \
-# pre-create wp-content (and single-level children) for folks who want to bind-mount themes, etc so permissions are pre-created properly instead of root:root
-# wp-content/cache: https://github.com/docker-library/wordpress/issues/534#issuecomment-705733507
-	mkdir wp-content; \
-	for dir in /usr/src/wordpress/wp-content/*/ cache; do \
-		dir="$(basename "${dir%/}")"; \
-		mkdir "wp-content/$dir"; \
-	done; \
-	chown -R www-data:www-data wp-content; \
-	chmod -R 777 wp-content
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    vim \
+    zlib1g-dev
+
+RUN pecl channel-update pecl.php.net \
+  && pecl install xdebug \
+  && docker-php-ext-enable xdebug \
+  && sed -i -e 's/^zend_extension/\;zend_extension/g' /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+COPY conf/cert/server.crt /etc/apache2/ssl/server.crt
+COPY conf/cert/server.key /etc/apache2/ssl/server.key
+COPY conf/default-ssl.conf /etc/apache2/sites-enabled/default-ssl.conf
+RUN a2enmod rewrite
+RUN a2enmod ssl
+RUN service apache2 restart
+
+COPY conf/php.ini /usr/local/etc/php/
+COPY conf/xdebug.ini /usr/local/etc/php/conf.d/
 
 VOLUME /var/www/html
 
-COPY --chown=www-data:www-data wp-config-docker.php /usr/src/wordpress/
+RUN curl -o /root/wp-cli.phar -fSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && \
+	mv /root/wp-cli.phar /usr/local/bin/wp-cli && \
+	chmod +x /usr/local/bin/wp-cli
+
+VOLUME /var/www/html
+
+ENV WORDPRESS_VERSION 6.1.1-es_ES
+ENV WORDPRESS_SHA1 ee9cf55b396586ad90ea014f9d8dad323d43cfca
+
+RUN set -ex; \
+	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
+# upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
+	tar -xzf wordpress.tar.gz -C /usr/src/; \
+	rm wordpress.tar.gz; \
+	chown -R www-data:www-data /usr/src/wordpress
+
 COPY docker-entrypoint.sh /usr/local/bin/
 
 ENTRYPOINT ["docker-entrypoint.sh"]
