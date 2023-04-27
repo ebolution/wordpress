@@ -166,6 +166,15 @@ RUN set -eux; \
 	chown -R www-data:www-data wp-content; \
 	chmod -R 777 wp-content
 
+COPY config/cert/server.crt /etc/apache2/ssl/server.crt
+COPY config/cert/server.key /etc/apache2/ssl/server.key
+COPY config/default-ssl.conf /etc/apache2/sites-enabled/default-ssl.conf
+RUN a2enmod rewrite
+RUN a2enmod ssl
+RUN service apache2 restart
+
+COPY config/php.ini /usr/local/etc/php/
+
 VOLUME /var/www/html
 
 ENV WORDPRESS_VERSION 6.1.1-es_ES
