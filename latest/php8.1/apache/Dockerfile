@@ -6,6 +6,9 @@
 
 FROM php:8.1-apache
 
+ENV WORDPRESS_VERSION 6.2.1-es_ES
+ENV WORDPRESS_SHA1 0c4800b479527a25c829dc192802db87f0ac151e
+
 # persistent dependencies
 RUN set -eux; \
 	apt-get update; \
@@ -129,11 +132,9 @@ RUN set -eux; \
 	find /etc/apache2 -type f -name '*.conf' -exec sed -ri 's/([[:space:]]*LogFormat[[:space:]]+"[^"]*)%h([^"]*")/\1%a\2/g' '{}' +
 
 RUN set -eux; \
-	version='6.1.1'; \
-	sha1='80f0f829645dec07c68bcfe0a0a1e1d563992fcb'; \
 	\
-	curl -o wordpress.tar.gz -fL "https://wordpress.org/wordpress-$version.tar.gz"; \
-	echo "$sha1 *wordpress.tar.gz" | sha1sum -c -; \
+    curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
 	\
 # upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
 	tar -xzf wordpress.tar.gz -C /usr/src/; \
@@ -177,17 +178,14 @@ COPY config/php.ini /usr/local/etc/php/
 
 VOLUME /var/www/html
 
-ENV WORDPRESS_VERSION 6.2.1-es_ES
-ENV WORDPRESS_SHA1 0c4800b479527a25c829dc192802db87f0ac151e
-
-RUN set -ex; \
-	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
-	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
-	tar -xzf wordpress.tar.gz -C /var/www/html/; \
-    cp -r wordpress/* .; \
-    rm wordpress.tar.gz; \
-    rm -rf wordpress; \
-    chown -R www-data:www-data /var/www/html
+#RUN set -ex; \
+#	curl -o wordpress.tar.gz -fSL "https://es.wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+#	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
+#	tar -xzf wordpress.tar.gz -C /var/www/html/; \
+#    cp -r wordpress/* .; \
+#    rm wordpress.tar.gz; \
+#    rm -rf wordpress; \
+#    chown -R www-data:www-data /var/www/html
 
 COPY --chown=www-data:www-data wp-config-docker.php /usr/src/wordpress/
 COPY docker-entrypoint.sh /usr/local/bin/
